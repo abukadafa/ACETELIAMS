@@ -64,7 +64,7 @@ const AuditLogSchema = new Schema<IAuditLog>({
 
 // TTL Index for 3-year retention policy (TASK 4.2)
 // 3 years = 3 * 365 * 24 * 60 * 60 = 94,608,000 seconds
-AuditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 94608000 });
+AuditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 63072000 });
 
 // Enforce read-only at Mongoose level
 AuditLogSchema.pre('save', function(this: any) {

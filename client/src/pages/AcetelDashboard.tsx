@@ -2153,7 +2153,7 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
               fileName={`ACETEL_${category}_Courses`} 
               title={`${category} Course Registry`}
               headers={[["Code", "Title", "Programme", "Category", "Semester"]]}
-              data={displayRows.map(c => [c.id, c.title, c.programme, category, SEMESTER_LABELS[Number(c.semester || c.sem)] || `Semester ${c.semester || c.sem}`])}
+              data={displayRows.map(c => [c.code, c.title, c.programme, category, SEMESTER_LABELS[Number(c.semester || c.sem)] || `Semester ${c.semester || c.sem}`])}
             />
             <label style={{ background: "rgba(30,58,138,0.85)", borderRadius: 8, padding: "10px 18px", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
               📥 Bulk Upload
@@ -2201,7 +2201,7 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
                       }}
                     />
                   </td>
-                  <td style={{ padding: "14px", fontSize: 13, fontWeight: 700, color: "#1e3a8a", fontFamily: "'Space Mono', monospace" }}>{c.id}</td>
+                  <td style={{ padding: "14px", fontSize: 13, fontWeight: 700, color: "#1e3a8a", fontFamily: "'Space Mono', monospace" }}>{c.code}</td>
                   <td style={{ padding: "14px", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{c.title}</td>
                   <td style={{ padding: "14px", fontSize: 12, color: "#475569", fontWeight: 600 }}>{c.programme}</td>
                   <td style={{ padding: "14px", fontSize: 12, color: "#64748b", fontWeight: 700 }}>{SEMESTER_LABELS[Number(c.semester || c.sem)] || `Semester ${c.semester || c.sem}`}</td>
@@ -2241,7 +2241,7 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
                               }}
                             />
                           </td>
-                          <td style={{ padding: "14px", fontSize: 13, fontWeight: 700, color: "#1e3a8a", fontFamily: "'Space Mono', monospace" }}>{c.id}</td>
+                          <td style={{ padding: "14px", fontSize: 13, fontWeight: 700, color: "#1e3a8a", fontFamily: "'Space Mono', monospace" }}>{c.code}</td>
                           <td style={{ padding: "14px", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{c.title}</td>
                           <td style={{ padding: "14px", fontSize: 12, color: "#475569", fontWeight: 600 }}>{c.programme}</td>
                           <td style={{ padding: "14px", fontSize: 12, color: "#64748b", fontWeight: 700 }}>{SEMESTER_LABELS[Number(c.semester || c.sem)] || `Semester ${c.semester || c.sem}`}</td>
@@ -3656,7 +3656,8 @@ export default function ACETELDashboard() {
       setAcademicCourses(
         (acData || []).map((c) => ({
           ...c,
-          id: c.code || c.id,
+          id: c._id || c.id,
+          code: c.code,
           prog: c.programme || c.prog,
           cat: c.category || c.cat,
           sem: c.semester ?? c.sem,
