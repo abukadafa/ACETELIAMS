@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # MongoDB for Application Data
+  mongodb:
+    image: mongo:latest
+    container_name: acetel-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD:-password}
+    volumes:
+      - mongodb-data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - acetel-network
+
+  # Backend Server
+  server:
+    image: node:20-alpine
+    container_name: acetel-server
+    working_dir: /app
+    command: sh -c "npm install && npm start"
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/acetel_iams
+      - REDIS_HOST=redis
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - NODE_ENV=production
+      - UPLOAD_PATH=/app/uploads
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - acetel-network
+    volumes:
+      - ../server:/app
+      - /app/node_modules
+      - acetel-uploads:/app/uploads
+
+  # Redis for Queue Management
+  redis:
+    image: redis:alpine
+    container_name: acetel-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - acetel-network
+
+  # Frontend Client
+  client:
+    image: node:20-alpine
+    container_name: acetel-client
+    working_dir: /app
+    command: sh -c "npm install && npm run build && npm install -g serve && serve -s dist -l 5173"
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    volumes:
+      - ../client:/app
+      - /app/node_modules
+    networks:
+      - acetel-network
+    depends_on:
+      - server
+
+networks:
+  acetel-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:
+  acetel-uploads:
