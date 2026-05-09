@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import AcademicEvent from '../models/AcademicEvent.model';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // POST - create a new academic event
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const event = new AcademicEvent(req.body);
         await event.save();
@@ -25,7 +26,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // POST /api/academic-events/bulk — bulk import
-router.post('/bulk', async (req: Request, res: Response) => {
+router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const { events } = req.body;
         if (!Array.isArray(events)) return res.status(400).json({ message: 'events must be an array' });
@@ -50,7 +51,7 @@ router.post('/bulk', async (req: Request, res: Response) => {
 });
 
 // PATCH - upload/append attendance records to an event
-router.patch('/:id/attendance', async (req: Request, res: Response) => {
+router.patch('/:id/attendance', authenticate, authorize('admin', 'staff'), async (req: Request, res: Response) => {
     try {
         const { attendees } = req.body;
         if (!Array.isArray(attendees)) {
@@ -69,7 +70,7 @@ router.patch('/:id/attendance', async (req: Request, res: Response) => {
 });
 
 // DELETE - remove an academic event
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         await AcademicEvent.findByIdAndDelete(req.params.id);
         res.json({ message: 'Academic event deleted' });

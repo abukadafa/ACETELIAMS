@@ -7,7 +7,7 @@ import { evaluateApplicationEligibility } from '../services/admissionEvaluation.
 import SystemAuditLog from '../models/SystemAuditLog.model';
 import * as notificationService from '../services/notification.service';
 
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 import { env } from '../config/env';
 import { upload, getStoragePath } from '../services/fileUpload';
 import { escapeRegex } from '../utils/mongoRegex';
@@ -70,7 +70,7 @@ async function autoPullStudentFromApplication(app: any): Promise<{ ok: boolean; 
  * Public upload for admission documents (validation + global API rate limits).
  * Authenticated downloads remain on GET /files below.
  */
-router.post('/upload', upload.single('file'), async (req: any, res: Response) => {
+router.post('/upload', authenticate, upload.single('file'), async (req: any, res: Response) => {
     try {
         if (!req.file) {
             return res.status(400).json({ message: 'No file uploaded' });
@@ -309,7 +309,7 @@ router.post('/bulk', authenticate, async (req: Request, res: Response) => {
 });
 
 // POST /api/applications — create one
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticate, authorize('admin', 'staff'), async (req: Request, res: Response) => {
     try {
         const app = new Application(req.body);
         await app.save();

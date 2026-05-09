@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Course from '../models/Course.model';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // POST - create a new short course
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const course = new Course(req.body);
         await course.save();
@@ -25,7 +26,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // POST /api/short-courses/bulk — bulk import
-router.post('/bulk', async (req: Request, res: Response) => {
+router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const { courses } = req.body;
         if (!Array.isArray(courses)) return res.status(400).json({ message: 'courses must be an array' });
@@ -50,7 +51,7 @@ router.post('/bulk', async (req: Request, res: Response) => {
 });
 
 // PATCH - upload/append enrolled students to a course
-router.patch('/:id/students', async (req: Request, res: Response) => {
+router.patch('/:id/students', authenticate, authorize('admin', 'staff'), async (req: Request, res: Response) => {
     try {
         const { students } = req.body;
         if (!Array.isArray(students)) {
@@ -106,7 +107,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
 export default router;
 
 // DELETE /api/short-courses/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const course = await Course.findByIdAndDelete(req.params.id);
         if (!course) return res.status(404).json({ message: 'Course not found' });

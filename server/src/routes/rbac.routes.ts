@@ -11,12 +11,12 @@ const router = express.Router();
 router.use(authenticate, authorize('admin'));
 
 router.get('/roles', getRoles);
-router.post('/roles', createRole);
-router.put('/roles/:id', updateRole);
+router.post('/roles', authenticate, authorize('admin'), createRole);
+router.put('/roles/:id', authenticate, authorize('admin'), updateRole);
 
 router.get('/permissions', getPermissions);
-router.post('/permissions', createPermission);
+router.post('/permissions', authenticate, authorize('admin'), createPermission);
 
-router.post('/assign', assignRoleToUser);
+router.post('/assign', authenticate, authorize('admin'), assignRoleToUser);
 
 export default router;

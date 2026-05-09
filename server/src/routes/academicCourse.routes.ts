@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import AcademicCourse from '../models/AcademicCourse.model';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -64,7 +65,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
 });
 
 // POST /api/academic-courses — create one
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const course = new AcademicCourse(req.body);
         await course.save();
@@ -75,7 +76,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // POST /api/academic-courses/bulk — bulk import from Excel parse
-router.post('/bulk', async (req: Request, res: Response) => {
+router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const { courses } = req.body;
         if (!Array.isArray(courses) || courses.length === 0) {
@@ -119,7 +120,7 @@ router.post('/bulk', async (req: Request, res: Response) => {
 });
 
 // PUT /api/academic-courses/:id — update
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const course = await AcademicCourse.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
         if (!course) return res.status(404).json({ message: 'Course not found' });
@@ -130,7 +131,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/academic-courses/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         await AcademicCourse.findByIdAndDelete(req.params.id);
         res.json({ message: 'Course deleted' });

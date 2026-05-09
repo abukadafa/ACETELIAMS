@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Alumni from '../models/Alumni.model';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -102,7 +103,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
 });
 
 // POST /api/alumni — create one
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticate, authorize('admin', 'staff'), async (req: Request, res: Response) => {
     try {
         const alumni = new Alumni(req.body);
         await alumni.save();
@@ -113,7 +114,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // POST /api/alumni/bulk — bulk import
-router.post('/bulk', async (req: Request, res: Response) => {
+router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         const { alumni } = req.body;
         if (!Array.isArray(alumni) || alumni.length === 0) {
@@ -154,7 +155,7 @@ router.post('/bulk', async (req: Request, res: Response) => {
 });
 
 // PUT /api/alumni/:id — update
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', authenticate, authorize('admin', 'staff'), async (req: Request, res: Response) => {
     try {
         const alumni = await Alumni.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
         if (!alumni) return res.status(404).json({ message: 'Alumni record not found' });
@@ -165,7 +166,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/alumni/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
         await Alumni.findByIdAndDelete(req.params.id);
         res.json({ message: 'Alumni record deleted' });
