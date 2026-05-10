@@ -67,13 +67,38 @@ router.get('/stats', async (_req: Request, res: Response) => {
 // POST /api/academic-courses — create one
 router.post('/', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
-        const course = new AcademicCourse(req.body);
+        const body = { ...req.body };
+        if (body.programme) body.programme = normaliseProgramme(body.programme);
+        if (body.cat || body.category) { body.category = normaliseCategory(body.cat || body.category); delete body.cat; }
+        if (body.sem) { body.semester = Number(body.sem) || 1; delete body.sem; }
+        const course = new AcademicCourse(body);
         await course.save();
         res.status(201).json(course);
     } catch (error: any) {
         res.status(400).json({ message: 'Error creating course', error: error.message });
     }
 });
+
+// Normalise free-text programme names to the canonical enum values stored in MongoDB
+function normaliseProgramme(raw: string): string {
+    if (!raw) return 'MSc Artificial Intelligence';
+    const r = raw.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();
+    if (r.includes('phd') || r.includes('doctor')) {
+        if (r.includes('cyber') || r.includes('security')) return 'PhD Cybersecurity';
+        if (r.includes('mis') || r.includes('management') || r.includes('information')) return 'PhD Management Information System';
+        return 'PhD Artificial Intelligence';
+    }
+    if (r.includes('cyber') || r.includes('security')) return 'MSc Cybersecurity';
+    if (r.includes('mis') || r.includes('management') || r.includes('information')) return 'MSc Management Information System';
+    return 'MSc Artificial Intelligence';
+}
+
+function normaliseCategory(raw: string): 'Core' | 'Elective' | 'General' {
+    const r = (raw || '').toLowerCase().trim();
+    if (r.includes('elective') || r.includes('elect')) return 'Elective';
+    if (r.includes('general') || r.includes('gen')) return 'General';
+    return 'Core';
+}
 
 // POST /api/academic-courses/bulk — bulk import from Excel parse
 router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res: Response) => {
@@ -92,17 +117,20 @@ router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res:
                     {
                         code: (c.code || c['Course Code'] || '').toUpperCase(),
                         title: c.title || c['Course Title'] || 'Unknown',
-                        programme: c.programme || c['Programme'] || 'MSc Artificial Intelligence',
+                        programme: normaliseProgramme(c.programme || c['Programme'] || c['Program'] || ''),
                         semester: (() => {
                             const s = String(c.sem || c.semester || c['Semester'] || '').toLowerCase().trim();
                             if (s.includes('first') || s.includes('1st') || s === '1') return 1;
                             if (s.includes('second') || s.includes('2nd') || s === '2') return 2;
                             if (s.includes('third') || s.includes('3rd') || s === '3') return 3;
+                            if (s.includes('fourth') || s.includes('4th') || s === '4') return 4;
+                            if (s.includes('fifth') || s.includes('5th') || s === '5') return 5;
+                            if (s.includes('sixth') || s.includes('6th') || s === '6') return 6;
                             const match = s.match(/\d+/);
-                            return match ? parseInt(match[0]) : 1;
+                            return match ? Math.min(12, Math.max(1, parseInt(match[0]))) : 1;
                         })(),
-                        category: c.cat || c.category || c['Category (Core/Elective/General)'] || 'Core',
-                        creditUnits: Number(c.creditUnits || c['Credit Units']) || 3,
+                        category: normaliseCategory(c.cat || c.category || c['Category'] || c['Category (Core/Elective/General)'] || 'Core'),
+                        creditUnits: Number(c.creditUnits || c['Credit Units'] || c['Units']) || 3,
                         status: 'Active',
                     },
                     { upsert: true, new: true }

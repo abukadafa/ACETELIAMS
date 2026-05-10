@@ -404,7 +404,7 @@ const ModuleAnalyticsStrip = ({ title, rows, color = "#1F7A63" }) => {
         {rows.map((r) => (
           <div key={r.label} style={{ padding: "10px 14px", background: `${color}08`, borderRadius: 10, border: `1px solid ${color}15`, minWidth: 96 }}>
             <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700 }}>{r.label}</div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: color, fontFamily: "'Syne', sans-serif" }}>{r.value}</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: color, fontFamily: "'Syne', sans-serif" }}>{r.value !== null && typeof r.value === 'object' ? ('result' in r.value ? r.value.result : JSON.stringify(r.value)) : (r.value ?? '—')}</div>
           </div>
         ))}
       </div>
@@ -435,7 +435,7 @@ const OverviewTab = ({
   const activeStudents  = students?.active || 0;
   const totalApps       = applications?.total   || 0;
   const totalAdmitted   = applications?.admitted || 0;
-  const totalAlumni     = Array.isArray(alumni)  ? alumni.length  : 0;
+  const totalAlumni     = Array.isArray(alumni) ? alumni.length : (alumni?.total ?? 0);
   const totalFacs       = Array.isArray(facilitators) ? facilitators.length : 0;
   const totalCourses    = Array.isArray(academicCourses) ? academicCourses.length : 0;
   const totalShort      = Array.isArray(shortCourses) ? shortCourses.length : 0;
@@ -581,8 +581,8 @@ const OverviewTab = ({
       {/* 2. Summary Cards (4 cards in grid) */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:24, marginBottom:32 }}>
         <Card label='Registered Students' val={totalStudents} icon='🎓' color='#3b82f6' sub={`${activeStudents} Active Sessions`} />
-        <Card label='Global Reach' val={uniqueNationalities} icon='🌍' color='#8b5cf6' sub={`${uniqueNationalities}+ Nationalities`} />
-        <Card label='Admitted' val={totalAdmitted} icon='📜' color='#10b981' sub={`${conversionRate}% Success Rate`} />
+        <Card label='Alumni Records' val={totalAlumni} icon='🏆' color='#10b981' sub={`Graduate Network`} />
+        <Card label='Admitted' val={totalAdmitted} icon='📜' color='#8b5cf6' sub={`${conversionRate}% Success Rate`} />
         <Card label='Faculty Network' val={totalFacs} icon='🧑‍🏫' color='#f59e0b' sub={`1:${analytics?.facilitatorToStudentRatio || 'N/A'} Staff Ratio`} />
       </div>
 
@@ -846,7 +846,16 @@ const normEmail = (e) => (e || "").trim().toLowerCase();
 
 /** Compares **registered** students to **admitted** applications (matric or email). */
 const RegistryVsAdmissionsTab = ({ data }) => {
-  const { students, applications } = data;
+  const { students = [], applications = [] } = data || {};
+  if (!students.length && !applications.length) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>No data to align yet</div>
+        <div style={{ fontSize: 13, marginTop: 6 }}>Upload students and admissions data first, then return here to see alignment gaps.</div>
+      </div>
+    );
+  }
   const admittedKeys = new Set();
   (applications || []).forEach((a) => {
     if (a.status !== "Admitted" && a.status !== "admitted") return;
@@ -1266,6 +1275,204 @@ const RegisteredStudentsTab = ({ data, onEdit, onDelete, onHistory, onAddStudent
           </table>
         </div>
       </div>
+    </div>
+  );
+};
+
+
+// ─── Admission Hub Tab ────────────────────────────────────────────────────────
+const REJECTION_REASONS = [
+  "Low CGPA",
+  "Unavailability of BSc and MSc Certificates/other relevant documents",
+  "Deficiency in O'level results",
+  "Research Proposals that were deemed unresearchable and failed assessment",
+  "Evidence of application payment receipts not uploaded",
+];
+
+const AdmissionHubTab = ({ data, onBulkUpload, onDownloadTemplate, onDelete, selectedIds = [], onSelectionChange }) => {
+  const records = data?.admissionHub || [];
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [cohortFilter, setCohortFilter] = useState('All');
+  const [progFilter, setProgFilter] = useState('All');
+  const [syncing, setSyncing] = useState(false);
+
+  const cohorts = [...new Set(records.map(r => r.cohort).filter(Boolean))].sort().reverse();
+  const progs   = [...new Set(records.map(r => r.programme).filter(Boolean))].sort();
+
+  const filtered = records.filter(r => {
+    const q = search.toLowerCase();
+    const matchQ = !q || (r.name||'').toLowerCase().includes(q) || (r.email||'').toLowerCase().includes(q) || (r.matricNo||'').toLowerCase().includes(q);
+    const matchS = statusFilter === 'All' || r.admissionStatus === statusFilter;
+    const matchC = cohortFilter === 'All' || r.cohort === cohortFilter;
+    const matchP = progFilter === 'All' || r.programme === progFilter;
+    return matchQ && matchS && matchC && matchP;
+  });
+
+  const admitted    = records.filter(r => r.admissionStatus === 'Admitted').length;
+  const notAdmitted = records.filter(r => r.admissionStatus === 'Not Admitted').length;
+  const pending     = records.filter(r => r.admissionStatus === 'Pending').length;
+
+  const statusColor = (s) => s === 'Admitted' ? '#10b981' : s === 'Not Admitted' ? '#ef4444' : '#f59e0b';
+  const statusBg    = (s) => s === 'Admitted' ? '#ecfdf5' : s === 'Not Admitted' ? '#fef2f2' : '#fffbeb';
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.post('/admission-hub/sync');
+      alert(r?.message || 'Sync complete.');
+      if (typeof fetchData === 'function') fetchData();
+    } catch (e) { alert('Sync failed: ' + (e?.response?.data?.message || e.message)); }
+    finally { setSyncing(false); }
+  };
+
+  const handleExportExcel = async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Admission Hub');
+    ws.columns = [
+      { header: 'Name', key: 'name', width: 28 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Matric No', key: 'matricNo', width: 16 },
+      { header: 'Programme', key: 'programme', width: 30 },
+      { header: 'Cohort', key: 'cohort', width: 10 },
+      { header: 'Admission Status', key: 'admissionStatus', width: 18 },
+      { header: 'Rejection / Deficiency Notes', key: 'rejectionNotes', width: 60 },
+    ];
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F7A63' } };
+    filtered.forEach(r => ws.addRow({
+      ...r,
+      rejectionNotes: Array.isArray(r.rejectionNotes) ? r.rejectionNotes.join('; ') : (r.rejectionNotes || ''),
+    }));
+    const buf = await wb.xlsx.writeBuffer();
+    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'AdmissionHub.xlsx'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{ padding: '0 0 32px' }}>
+      {/* Header */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:900, color:'#1F7A63' }}>Admission Hub</div>
+          <div style={{ fontSize:13, color:'#64748b', marginTop:3 }}>Independent upload — auto-matched against admitted pool</div>
+        </div>
+        <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+          <button onClick={handleSync} disabled={syncing} style={{ padding:'9px 18px', background:'#1F7A63', color:'#fff', border:'none', borderRadius:8, fontWeight:700, cursor:'pointer', fontSize:13 }}>
+            {syncing ? '⟳ Syncing…' : '⟳ Sync with Admitted Pool'}
+          </button>
+          <label style={{ padding:'9px 18px', background:'#3b82f6', color:'#fff', borderRadius:8, fontWeight:700, cursor:'pointer', fontSize:13 }}>
+            ⬆ Upload Excel
+            <input type="file" style={{ display:'none' }} accept=".xlsx,.xls,.csv"
+              onChange={e => onBulkUpload && onBulkUpload(e, 'AdmissionHub')} />
+          </label>
+          <button onClick={() => onDownloadTemplate && onDownloadTemplate('AdmissionHub')}
+            style={{ padding:'9px 18px', background:'#f1f5f9', color:'#1e293b', border:'1px solid #e2e8f0', borderRadius:8, fontWeight:700, cursor:'pointer', fontSize:13 }}>
+            ⬇ Template
+          </button>
+          <button onClick={handleExportExcel}
+            style={{ padding:'9px 18px', background:'#f1f5f9', color:'#1e293b', border:'1px solid #e2e8f0', borderRadius:8, fontWeight:700, cursor:'pointer', fontSize:13 }}>
+            ⬇ Export Excel
+          </button>
+        </div>
+      </div>
+
+      {/* Stat chips */}
+      <div style={{ display:'flex', gap:12, marginBottom:20, flexWrap:'wrap' }}>
+        {[
+          { label:'Total Records', val:records.length, color:'#1F7A63' },
+          { label:'Admitted', val:admitted, color:'#10b981' },
+          { label:'Not Admitted', val:notAdmitted, color:'#ef4444' },
+          { label:'Pending', val:pending, color:'#f59e0b' },
+        ].map(c => (
+          <div key={c.label} style={{ padding:'12px 20px', background:'#fff', borderRadius:10, border:`1px solid ${c.color}25`, borderLeft:`4px solid ${c.color}`, minWidth:120 }}>
+            <div style={{ fontSize:10, fontWeight:800, color:c.color, textTransform:'uppercase', letterSpacing:0.8 }}>{c.label}</div>
+            <div style={{ fontSize:26, fontWeight:900, color:c.color }}>{c.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name / email / matric…"
+          style={{ flex:1, minWidth:200, padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13 }} />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          style={{ padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13 }}>
+          <option>All</option><option>Admitted</option><option>Not Admitted</option><option>Pending</option>
+        </select>
+        <select value={cohortFilter} onChange={e => setCohortFilter(e.target.value)}
+          style={{ padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13 }}>
+          <option value="All">All Cohorts</option>
+          {cohorts.map(c => <option key={c}>{c}</option>)}
+        </select>
+        <select value={progFilter} onChange={e => setProgFilter(e.target.value)}
+          style={{ padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13 }}>
+          <option value="All">All Programmes</option>
+          {progs.map(p => <option key={p}>{p}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
+      {filtered.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'60px 0', color:'#94a3b8' }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>📋</div>
+          <div style={{ fontSize:16, fontWeight:700 }}>No records yet</div>
+          <div style={{ fontSize:13, marginTop:6 }}>Upload an Excel file to populate the Admission Hub.</div>
+        </div>
+      ) : (
+        <div style={{ overflowX:'auto', background:'#fff', borderRadius:12, border:'1px solid #e2e8f0', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+            <thead>
+              <tr style={{ background:'#f8fafc', borderBottom:'2px solid #e2e8f0' }}>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Name</th>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Email</th>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Matric</th>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Programme</th>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Cohort</th>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Status</th>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Rejection / Deficiency Notes</th>
+                <th style={{ padding:'12px 14px', textAlign:'left', fontWeight:800, color:'#475569' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r, i) => (
+                <tr key={r._id || r.id || i} style={{ borderBottom:'1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td style={{ padding:'11px 14px', fontWeight:700 }}>{r.name}</td>
+                  <td style={{ padding:'11px 14px', color:'#64748b' }}>{r.email || '—'}</td>
+                  <td style={{ padding:'11px 14px', color:'#64748b', fontFamily:'monospace' }}>{r.matricNo || '—'}</td>
+                  <td style={{ padding:'11px 14px', color:'#475569' }}>{r.programme || '—'}</td>
+                  <td style={{ padding:'11px 14px', color:'#475569' }}>{r.cohort || '—'}</td>
+                  <td style={{ padding:'11px 14px' }}>
+                    <span style={{ padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:800, background:statusBg(r.admissionStatus), color:statusColor(r.admissionStatus), border:`1px solid ${statusColor(r.admissionStatus)}40` }}>
+                      {r.admissionStatus}
+                    </span>
+                  </td>
+                  <td style={{ padding:'11px 14px', maxWidth:300 }}>
+                    {Array.isArray(r.rejectionNotes) && r.rejectionNotes.length > 0 ? (
+                      <ul style={{ margin:0, paddingLeft:16, color:'#ef4444', fontSize:12 }}>
+                        {r.rejectionNotes.map((n, ni) => <li key={ni}>{n}</li>)}
+                      </ul>
+                    ) : (
+                      <span style={{ color:'#94a3b8' }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ padding:'11px 14px' }}>
+                    <button onClick={() => onDelete && onDelete(r)}
+                      style={{ padding:'5px 12px', background:'#fef2f2', color:'#ef4444', border:'1px solid #fecaca', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:700 }}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ padding:'10px 16px', color:'#94a3b8', fontSize:12, borderTop:'1px solid #f1f5f9' }}>
+            Showing {filtered.length} of {records.length} records
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -3540,6 +3747,7 @@ export default function ACETELDashboard() {
   const [students, setStudents] = useState([]);
   const [applications, setApplications] = useState([]);
   const [alumni, setAlumni] = useState([]);
+  const [admissionHub, setAdmissionHub] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
   const [facilitators, setFacilitators] = useState([]);
   const [users, setUsers] = useState([]);
@@ -3608,12 +3816,13 @@ export default function ACETELDashboard() {
 
   const fetchData = async () => {
     try {
-      const [cronData, dashData, sData, appData, almData, scData, aeData, acData, userData] = await Promise.all([
+      const [cronData, dashData, sData, appData, almData, ahData, scData, aeData, acData, userData] = await Promise.all([
         api.get('/dashboard/cron-stats').catch(() => []),
         api.get('/dashboard/stats').catch(() => EMPTY_DASHBOARD),
         api.get('/students').catch(() => []),
         api.get('/applications').catch(() => []),
         api.get('/alumni').catch(() => []),
+        api.get('/admission-hub').catch(() => []),
         api.get('/short-courses').catch(() => []),
         api.get('/academic-events').catch(() => []),
         api.get('/academic-courses').catch(() => []),
@@ -3645,14 +3854,16 @@ export default function ACETELDashboard() {
         };
       }));
 
+      setAdmissionHub(Array.isArray(ahData) ? ahData : []);
+
       setAlumni(almData.map(a => {
         const { surname, otherNames } = (a.surname && a.otherNames) ? { surname: a.surname, otherNames: a.otherNames } : splitName(a.name);
         const cohort = inferCohort(a.cohort);
         return { ...a, surname, otherNames, prog: a.programme, cohort };
       }));
 
-      setShortCourses(scData);
-      setAcademicEvents(aeData);
+      setShortCourses(Array.isArray(scData) ? scData : []);
+      setAcademicEvents(Array.isArray(aeData) ? aeData : []);
       setAcademicCourses(
         (acData || []).map((c) => ({
           ...c,
@@ -3681,9 +3892,9 @@ export default function ACETELDashboard() {
             dept: f.department || f.dept || f.programmes?.[0] || "ACETEL",
             expertise: f.specialization || f.expertise || f.programmes?.join(", ") || "General",
             facilitatorCourses: f.facilitatorCourses || [],
-            current: Math.floor(Math.random() * 5),
+            current: (f.facilitatorCourses || []).length,
             max: 10,
-            load: (Math.floor(Math.random() * 5) / 10) * 100,
+            load: Math.min(100, ((f.facilitatorCourses || []).length / 10) * 100),
             status: f.status === "active" ? "Active" : f.status === "inactive" ? "Inactive" : f.status || "Active",
           };
         });
@@ -4333,7 +4544,16 @@ export default function ACETELDashboard() {
           const rowData = {};
           row.eachCell((cell, colNumber) => {
             const header = headers[colNumber];
-            if (header) rowData[header] = cell.value;
+            if (!header) return;
+            // Resolve formula cells: ExcelJS returns {formula, result} for cells with formulas
+            let val = cell.value;
+            if (val !== null && typeof val === 'object') {
+              if ('result' in val) val = val.result;           // formula cell → use result
+              else if ('text' in val) val = val.text;          // rich-text cell → use text
+              else if ('error' in val) val = null;             // error cell → null
+              else val = String(val);                          // any other object → stringify
+            }
+            rowData[header] = val ?? '';
           });
           if (Object.keys(rowData).length > 0) data.push(rowData);
         });
@@ -4517,6 +4737,36 @@ export default function ACETELDashboard() {
                alert(`Imported ${newSups.length} supervisors/facilitators.`);
                if (typeof fetchData === 'function') fetchData();
              } catch (err) { alert("Bulk save failed for supervisors."); }
+           } else if (listType === "AdmissionHub") {
+             const newRecords = data.map(row => {
+               const sName = row["Surname"] || row["Last Name"];
+               const oNames = row["Other Names"] || row["First Name"];
+               let { surname, otherNames } = (sName && oNames) ? { surname: sName, otherNames: oNames } : splitName(row["Full Name"] || row["Name"] || "");
+               const rawNotes = row["Rejection Notes"] || row["Deficiency Notes"] || row["Reason"] || "";
+               const parsedNotes = rawNotes
+                 ? rawNotes.split(/[;,|]/).map(s => s.trim()).filter(Boolean)
+                 : [];
+               return {
+                 name: `${surname} ${otherNames}`.trim() || row["Name"] || "Unknown",
+                 surname,
+                 otherNames,
+                 email: row["Email"] || row["Email Address"] || "",
+                 phone: row["Phone"] || row["Phone Number"] || "",
+                 programme: row["Programme"] || row["Program"] || "",
+                 cohort: row["Cohort"] || "",
+                 matricNo: row["Matric No"] || row["Matric Number"] || row["Matric"] || "",
+                 admissionStatus: "Pending",
+                 rejectionNotes: parsedNotes,
+               };
+             });
+             setAdmissionHub(prev => [...newRecords.map(r => ({ ...r, id: `ah_${Date.now()}_${Math.random().toString(36).substr(2,5)}` })), ...prev]);
+             try {
+               const result = await api.post("/admission-hub/bulk", { records: newRecords });
+               let msg = `Imported ${newRecords.length} records to Admission Hub.`;
+               if (result?.created != null) msg = `Saved: ${result.created} records processed. Backend auto-matched against admitted pool.`;
+               alert(msg);
+               if (typeof fetchData === 'function') fetchData();
+             } catch (err) { alert("Bulk save failed for Admission Hub: " + (err?.response?.data?.message || err.message)); }
            } else if (listType === "Facilitators") {
              const newFacs = data.map(row => {
                const sName = row["Surname"] || row["Last Name"];
@@ -4549,16 +4799,22 @@ export default function ACETELDashboard() {
              } catch (err) { alert("Bulk save failed for facilitators: " + (err?.response?.data?.message || err.message)); }
            } else if (listType === "ShortCourses") {
              const newCourses = data.map(row => ({ 
-               title: row["Course Title"] || row["Title"] || row["Course Name"] || row["Name"] || `Course ${Math.floor(Math.random()*100000)}`, 
-               duration: row["Duration"] || "N/A", 
-               studentsCount: parseInt(row["Students"]) || 0,
-               status: "Active" 
+               title: row["Course Title"] || row["Title"] || row["Course Name"] || row["Name"] || row["Programme"] || `Course ${Math.floor(Math.random()*100000)}`, 
+               duration: row["Duration"] || row["Course Duration"] || "N/A", 
+               studentsCount: parseInt(row["Students"] || row["Participants"] || row["Enrollment"] || "0") || 0,
+               facilitatorName: row["Facilitator"] || row["Instructor"] || row["Trainer"] || "",
+               startDate: row["Start Date"] || row["Date"] || "",
+               status: "Active",
+               students: [],
+               participants: []
              }));
+             // Optimistic UI update so cards appear immediately
+             setShortCourses(prev => [...newCourses.map(c => ({ ...c, id: `sc_${Date.now()}_${Math.random().toString(36).substr(2,5)}` })), ...prev]);
              try {
                await api.post("/short-courses/bulk", { courses: newCourses });
                alert(`Imported ${newCourses.length} short courses.`);
                if (typeof fetchData === 'function') fetchData();
-             } catch (err) { alert("Bulk save failed for short courses."); }
+             } catch (err) { alert("Bulk save failed for short courses: " + (err?.response?.data?.message || err.message)); }
            } else if (listType === "Academic_Courses" || listType === "AcademicPool") {
              const newCourses = data.map(row => ({
                code: (row["Course Code"] || row["Code"] || "").toUpperCase(),
@@ -4576,16 +4832,19 @@ export default function ACETELDashboard() {
              } catch (err) { alert("UI updated; backend save failed."); }
            } else if (listType === "Events") {
              const newEvents = data.map(row => ({ 
-               type: row["Type"] || (fileName.includes("workshop") ? "Workshop" : "Conference"), 
-               name: row["Name"] || row["Title"] || "Unknown", 
-               date: row["Date"] || new Date().toISOString().split("T")[0], 
-               location: row["Location"] || "N/A" 
+               type: row["Type"] || (fileName.toLowerCase().includes("workshop") ? "Workshop" : "Conference"), 
+               name: row["Name"] || row["Title"] || row["Event Name"] || row["Workshop Name"] || "Unknown", 
+               date: row["Date"] || row["Event Date"] || new Date().toISOString().split("T")[0], 
+               location: row["Location"] || row["Venue"] || "N/A",
+               attendance: []
              }));
+             // Optimistic UI update so cards appear immediately
+             setAcademicEvents(prev => [...newEvents.map(e => ({ ...e, id: `ev_${Date.now()}_${Math.random().toString(36).substr(2,5)}` })), ...prev]);
              try {
                await api.post("/academic-events/bulk", { events: newEvents });
-               alert(`Imported ${newEvents.length} events.`);
+               alert(`Imported ${newEvents.length} workshops/events.`);
                if (typeof fetchData === 'function') fetchData();
-             } catch (err) { alert("Bulk save failed for events."); }
+             } catch (err) { alert("Bulk save failed for events: " + (err?.response?.data?.message || err.message)); }
            } else if (listType === "EventAttendance") {
              const newAttendees = data.map(row => ({
                name: row["Name"] || row["Full Name"] || "Unknown",
@@ -5080,7 +5339,8 @@ export default function ACETELDashboard() {
                   { id: 'registered', label: 'Registered' },
                   { id: 'admitted_pool', label: 'Admitted' },
                   { id: 'gaps', label: 'Alignment' },
-                  { id: 'admissions', label: 'Admissions Hub' },
+                  { id: 'admission_hub', label: 'Admission Hub' },
+                  { id: 'admissions', label: 'Applications' },
                   { id: 'alumni', label: 'Alumni' }
                 ],
                 academics: [
@@ -5139,6 +5399,14 @@ export default function ACETELDashboard() {
 
           if (activeSection === 'students') {
             if (activeSubTab === 'registered') return <RegisteredStudentsTab data={{ students }} onEdit={(item) => setEditData({ ...item, _editType: 'student' })} onDelete={setDeleteData} onHistory={handleFileUpload} onAddStudent={() => setShowAddStudentModal(true)} progFilter={studentProgFilter} setProgFilter={setStudentProgFilter} cohortFilter={studentCohortFilter} setCohortFilter={setStudentCohortFilter} onDownloadTemplate={handleDownloadTemplate} analyticsSummary={analyticsSummary} selectedIds={selectedIds} onSelectionChange={setSelectedIds} />;
+            if (activeSubTab === 'admission_hub') return <AdmissionHubTab
+              data={{ admissionHub }}
+              onBulkUpload={handleFileUpload}
+              onDownloadTemplate={handleDownloadTemplate}
+              onDelete={setDeleteData}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+            />;
             if (activeSubTab === 'admitted_pool') return <AdmittedStudentsTab data={{ applications }} onEdit={(item) => setEditData({ ...item, _editType: 'application' })} onDelete={setDeleteData} progFilter={admissionProgFilter} setProgFilter={setAdmissionProgFilter} cohortFilter={admissionCohortFilter} setCohortFilter={setAdmissionCohortFilter} onAddAdmitted={() => setShowAddAdmittedModal(true)} onBulkUpload={handleFileUpload} onDownloadTemplate={handleDownloadTemplate} analyticsSummary={analyticsSummary} selectedIds={selectedIds} onSelectionChange={setSelectedIds} />;
             if (activeSubTab === 'gaps') return <RegistryVsAdmissionsTab data={{ students, applications }} />;
             if (activeSubTab === 'admissions') return <AdmissionsTab data={{ applications, metrics, students }} onEdit={(item) => setEditData({ ...item, _editType: 'application' })} onDelete={setDeleteData} onHistory={handleFileUpload} onDownloadTemplate={handleDownloadTemplate} cohortFilter={admissionCohortFilter} setCohortFilter={setAdmissionCohortFilter} onEvaluateEligibility={runAdmissionEvaluation} analyticsSummary={analyticsSummary} selectedIds={selectedIds} onSelectionChange={setSelectedIds} />;

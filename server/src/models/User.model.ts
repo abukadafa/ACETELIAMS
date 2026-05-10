@@ -85,7 +85,7 @@ const UserSchema: Schema = new Schema(
             {
                 courseCode: { type: String, required: true, trim: true, uppercase: true },
                 programme: { type: String, required: true, trim: true },
-                semester: { type: Number, required: true, min: 1, max: 3 },
+                semester: { type: Number, required: true, min: 1, max: 12 },
                 category: {
                     type: String,
                     required: true,
