@@ -13,7 +13,7 @@ export interface IUser extends Document {
     username: string;
     email: string;
     password: string;
-    role: 'admin' | 'staff' | 'facilitator' | 'student';
+    role: 'admin' | 'staff' | 'facilitator' | 'student' | 'technical';
     status: 'active' | 'inactive' | 'enrolled' | 'completed';
     programmes: string[];
     /** Course attachments for facilitators (programme + semester + category) */
@@ -67,7 +67,7 @@ const UserSchema: Schema = new Schema(
         },
         role: {
             type: String,
-            enum: ['admin', 'staff', 'facilitator', 'student'],
+            enum: ['admin', 'staff', 'facilitator', 'student', 'technical'],
             default: 'student',
         },
         status: {

@@ -70,7 +70,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
         // Strictly protect role updates (D3)
         if (updates.role && req.user!.role === 'admin') {
-            const validRoles = ['student', 'facilitator', 'admin'];
+            const validRoles = ['student', 'facilitator', 'admin', 'staff', 'technical'];
             if (validRoles.includes(updates.role)) {
                 user.role = updates.role;
             }
@@ -200,19 +200,38 @@ export const bulkCreateUsers = async (req: AuthRequest, res: Response) => {
 
                 const userPayload: any = {
                     ...userData,
+                    name: userData.name || `${userData.surname || ''} ${userData.otherNames || ''}`.trim() || 'Unknown',
                     username: finalUsername,
                     programmes: userData.programmes || (userData.programme ? [userData.programme] : []),
                     password: userData.password || defaultPassword || 'Welcome123',
                     status: userData.role === 'facilitator' ? 'active' : 'enrolled',
-                    mustChangePassword: true
+                    mustChangePassword: true,
+                    department: userData.department || userData['Department'],
+                    expertise: userData.expertise || userData['Expertise'],
+                    phone: userData.phone || userData['Phone Number']
                 };
+
+                // Handle Facilitator Course Assignments from standardized Excel (Task Phase 4)
+                if (userData.role === 'facilitator' && (userData['Course Code'] || userData.courseCode)) {
+                    const semRaw = String(userData.semester || userData['Semester (1-3)'] || '').toLowerCase().trim();
+                    let semester = 1;
+                    if (semRaw.includes('first') || semRaw === '1') semester = 1;
+                    else if (semRaw.includes('second') || semRaw === '2') semester = 2;
+                    else if (semRaw.includes('third') || semRaw === '3') semester = 3;
+
+                    userPayload.facilitatorCourses = [{
+                        courseCode: (userData['Course Code'] || userData.courseCode || '').toUpperCase(),
+                        programme: userData['Programme'] || userData.programme || 'MSc Artificial Intelligence',
+                        semester: semester,
+                        category: userData['Category (Core/Elective/General)'] || userData.category || 'Core'
+                    }];
+                }
 
                 if (!userPayload.studentId || (typeof userPayload.studentId === 'string' && userPayload.studentId.trim() === '')) {
                     delete userPayload.studentId;
                 }
 
                 const user = new User(userPayload);
-
                 await user.save();
                 results.created++;
             } catch (err: any) {

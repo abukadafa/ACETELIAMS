@@ -4,7 +4,7 @@ export const loginSchema = z.object({
     body: z.object({
         identifier: z.string().min(1, 'Email or username is required'),
         password: z.string().min(6, 'Password must be at least 6 characters'),
-        role: z.enum(['student', 'facilitator', 'admin']).optional(),
+        role: z.enum(['student', 'facilitator', 'admin', 'staff', 'technical']).optional(),
     }),
 });
 
@@ -27,7 +27,7 @@ export const updateUserSchema = z.object({
     body: z.object({
         name: z.string().optional(),
         email: z.string().email().optional(),
-        role: z.enum(['student', 'facilitator', 'admin']).optional(),
+        role: z.enum(['student', 'facilitator', 'admin', 'staff', 'technical']).optional(),
         status: z.enum(['enrolled', 'completed', 'inactive']).optional(),
         studentId: z.string().optional(),
     }),

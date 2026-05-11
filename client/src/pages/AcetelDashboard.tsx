@@ -2290,7 +2290,7 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
   const filtered = courses?.filter(c => c.cat === category) || [];
   const displayRows = filtered
     .filter(c => exportProg === "All Programmes" || c.programme === exportProg)
-    .filter(c => exportSem === "All Semesters" || Number(c.semester || c.sem) === Number(exportSem))
+    .filter(c => exportSem === "All Semesters" || Number(c.semester || c.sem || 0) === Number(exportSem))
     .slice()
     .sort((a, b) => progRank(a.programme || "") - progRank(b.programme || "") || Number(a.semester || a.sem) - Number(b.semester || b.sem));
   const courseTree = groupCoursesByProgrammeThenSemester(
