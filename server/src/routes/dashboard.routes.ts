@@ -380,4 +380,28 @@ router.post('/wipe', async (_req: Request, res: Response) => {
     }
 });
 
+import AuditLog from '../models/AuditLog.model';
+
+/**
+ * GET /api/dashboard/audit-logs
+ * Fetch the latest audit logs for administrative review.
+ */
+router.get('/audit-logs', async (req: Request, res: Response) => {
+    try {
+        const { limit = 100, action, resource, userId } = req.query;
+        const query: any = {};
+        if (action) query.action = action;
+        if (resource) query.resource = resource;
+        if (userId) query.userId = userId;
+
+        const logs = await AuditLog.find(query)
+            .sort({ createdAt: -1 })
+            .limit(Number(limit));
+            
+        res.json(logs);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Audit logs error', error: error.message });
+    }
+});
+
 export default router;

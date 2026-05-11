@@ -100,6 +100,8 @@ function normaliseCategory(raw: string): 'Core' | 'Elective' | 'General' {
     return 'Core';
 }
 
+import excelValidator, { ValidationRule } from '../services/excelValidator';
+
 // POST /api/academic-courses/bulk — bulk import from Excel parse
 router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res: Response) => {
     try {
@@ -108,9 +110,26 @@ router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res:
             return res.status(400).json({ message: 'No course data provided' });
         }
 
-        const results = { inserted: 0, skipped: 0, errors: [] as string[] };
+        // --- PRODUCTION HARDENING: Strict Validation (Task D) ---
+        const rules: ValidationRule[] = [
+            { field: 'code', label: 'Course Code', required: true },
+            { field: 'title', label: 'Course Title', required: true },
+            { field: 'programme', label: 'Programme', required: true }
+        ];
 
-        for (const c of courses) {
+        const { valid, errors } = excelValidator.validate(courses, rules);
+
+        const results = { 
+            inserted: 0, 
+            skipped: 0, 
+            totalProcessed: courses.length,
+            errorSummary: excelValidator.formatErrorReport(errors),
+            errors: errors.map(e => `Row ${e.row}: ${e.field} ${e.message}`)
+        };
+
+        // Partial upload rollback protection: In this institutional context, 
+        // we process the valid ones and return a report of the invalid ones.
+        for (const c of valid) {
             try {
                 await AcademicCourse.findOneAndUpdate(
                     { code: (c.code || c['Course Code'] || '').toUpperCase() },
@@ -138,7 +157,7 @@ router.post('/bulk', authenticate, authorize('admin'), async (req: Request, res:
                 results.inserted++;
             } catch (err: any) {
                 results.skipped++;
-                results.errors.push(`${c.code}: ${err.message}`);
+                results.errors.push(`System Error: ${c.code || 'Unknown'}: ${err.message}`);
             }
         }
         res.json(results);

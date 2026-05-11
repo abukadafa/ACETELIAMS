@@ -1,28 +1,40 @@
 import { Request, Response, NextFunction } from 'express';
 import auditLogService from '../services/audit-log.service';
+import logger from '../utils/logger';
 
 /**
  * Global Middleware to capture all state-changing operations (POST, PUT, DELETE, PATCH)
  */
 export const auditMiddleware = (req: any, res: Response, next: NextFunction) => {
-    // Only capture state-changing methods
-    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
-        // Skip specific routes like health checks or read-only logs if they were POST (rare)
-        if (req.path.includes('/health') || req.path.includes('/audit-logs/view')) {
-            return next();
-        }
+    const startTime = Date.now();
 
-        const originalJson = res.json;
-        const originalSend = res.send;
-
-        // Wrap res.json to capture final status and errors
-        res.json = function(body: any) {
-            res.locals.responseBody = body;
-            return originalJson.call(this, body);
+    // Log ALL requests in production for observability (Task B)
+    res.on('finish', async () => {
+        const duration = Date.now() - startTime;
+        const logData = {
+            method: req.method,
+            url: req.originalUrl,
+            status: res.statusCode,
+            duration: `${duration}ms`,
+            ip: req.ip || req.connection.remoteAddress,
+            userId: req.user?.id || 'anonymous'
         };
 
-        // Capture end of request
-        res.on('finish', async () => {
+        if (res.statusCode >= 500) {
+            logger.error('API Error Response', logData);
+        } else if (res.statusCode >= 400) {
+            logger.warn('API Warning Response', logData);
+        } else {
+            logger.info('API Request Success', logData);
+        }
+
+        // Only capture state-changing methods for the detailed Audit Log
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+            // Skip specific routes like health checks or read-only logs if they were POST (rare)
+            if (req.path.includes('/health') || req.path.includes('/audit-logs/view')) {
+                return;
+            }
+
             try {
                 const isSuccess = res.statusCode >= 200 && res.statusCode < 300;
                 
@@ -61,9 +73,17 @@ export const auditMiddleware = (req: any, res: Response, next: NextFunction) => 
                     errorMessage: isSuccess ? undefined : (res.locals.responseBody?.message || 'Operation failed')
                 });
             } catch (error) {
-                console.error('Audit Middleware Error:', error);
+                logger.error('Audit Persistence Failed', { error, path: req.path });
             }
-        });
-    }
+        }
+    });
+
+    // Capture response body for error logging
+    const originalJson = res.json;
+    res.json = function(body: any) {
+        res.locals.responseBody = body;
+        return originalJson.call(this, body);
+    };
+
     next();
 };

@@ -3326,6 +3326,83 @@ const WorkshopsTab = ({ data, onBulkUpload, onAddEvent, onEdit, onDelete, onAddP
   );
 };
 
+const AuditTrailTab = ({ logs = [] }) => {
+  const [filterAction, setFilterAction] = useState("all");
+  const [filterResource, setFilterResource] = useState("all");
+
+  const filteredLogs = logs.filter(log => {
+    if (filterAction !== "all" && !log.action.includes(filterAction)) return false;
+    if (filterResource !== "all" && log.resource !== filterResource) return false;
+    return true;
+  });
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8fafc" }}>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: "#1e3a8a" }}>📜 Institutional Audit Trail</h3>
+        <div style={{ display: "flex", gap: 12 }}>
+          <select value={filterAction} onChange={e => setFilterAction(e.target.value)} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12, fontWeight: 600 }}>
+            <option value="all">All Actions</option>
+            <option value="POST">Creation (POST)</option>
+            <option value="PUT">Modification (PUT)</option>
+            <option value="DELETE">Deletion (DELETE)</option>
+            <option value="AUTH">Security (AUTH)</option>
+          </select>
+          <select value={filterResource} onChange={e => setFilterResource(e.target.value)} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12, fontWeight: 600 }}>
+            <option value="all">All Resources</option>
+            <option value="STUDENTS">Students</option>
+            <option value="APPLICATIONS">Applications</option>
+            <option value="ACADEMIC-COURSES">Courses</option>
+            <option value="USERS">Users</option>
+          </select>
+        </div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#f8fafc", textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
+              <th style={{ padding: "14px 24px", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Timestamp</th>
+              <th style={{ padding: "14px", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Action</th>
+              <th style={{ padding: "14px", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Resource</th>
+              <th style={{ padding: "14px", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>User</th>
+              <th style={{ padding: "14px", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Details</th>
+              <th style={{ padding: "14px", fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLogs.map((log, idx) => (
+              <tr key={log._id || idx} style={{ borderBottom: "1px solid rgba(0,0,0,0.04)", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <td style={{ padding: "14px 24px", fontSize: 12, color: "#64748b", fontWeight: 500 }}>{new Date(log.createdAt).toLocaleString()}</td>
+                <td style={{ padding: "14px" }}>
+                  <span style={{ padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: log.action.includes('DELETE') ? "#fef2f2" : "#eff6ff", color: log.action.includes('DELETE') ? "#ef4444" : "#3b82f6" }}>
+                    {log.action}
+                  </span>
+                </td>
+                <td style={{ padding: "14px", fontSize: 12, color: "#475569", fontWeight: 700 }}>{log.resource.toUpperCase()}</td>
+                <td style={{ padding: "14px", fontSize: 12, color: "#0f172a", fontWeight: 600 }}>{log.userName || "System"}</td>
+                <td style={{ padding: "14px", fontSize: 11, color: "#64748b", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {log.resourceId ? `ID: ${log.resourceId} · ` : ""}{log.errorMessage || "Operation completed"}
+                </td>
+                <td style={{ padding: "14px" }}>
+                  <span style={{ color: log.status === 'success' ? "#10b981" : "#ef4444", fontSize: 11, fontWeight: 800 }}>
+                    {log.status === 'success' ? "● SUCCESS" : "○ FAILED"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {filteredLogs.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>No audit logs found matching filters.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+
 
 const UserManagementTab = ({ users = [], onRefresh }) => {
   const [auditLogs, setAuditLogs] = useState([]);
@@ -3816,7 +3893,7 @@ export default function ACETELDashboard() {
 
   const fetchData = async () => {
     try {
-      const [cronData, dashData, sData, appData, almData, ahData, scData, aeData, acData, userData] = await Promise.all([
+      const [cronData, dashData, sData, appData, almData, ahData, scData, aeData, acData, userData, logData] = await Promise.all([
         api.get('/dashboard/cron-stats').catch(() => []),
         api.get('/dashboard/stats').catch(() => EMPTY_DASHBOARD),
         api.get('/students').catch(() => []),
@@ -3827,10 +3904,12 @@ export default function ACETELDashboard() {
         api.get('/academic-events').catch(() => []),
         api.get('/academic-courses').catch(() => []),
         api.get('/users').catch(() => []),
+        api.get('/dashboard/audit-logs').catch(() => []),
       ]);
 
       setCronStats(cronData);
       setDashboardStats(dashData);
+      setAuditLogs(logData);
       
       if (dashData.students?.byNationality) setNationalities(dashData.students.byNationality);
 
@@ -5432,6 +5511,7 @@ export default function ACETELDashboard() {
           if (activeSection === 'admin') {
             if (activeSubTab === 'governance') return <GovernanceTab data={{ ...safeStats, cronStats }} auditLogs={auditLogs} />;
             if (activeSubTab === 'users') return <UserManagementTab users={users} onRefresh={fetchData} />;
+            if (activeSubTab === 'audit_trail') return <AuditTrailTab logs={auditLogs} />;
           }
 
           return <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Section under construction...</div>;

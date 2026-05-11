@@ -13,6 +13,7 @@ import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/asyncHandler';
 import { successResponse, errorResponse } from '../utils/response';
 import { env } from '../config/env';
+import logger from '../utils/logger';
 
 const generateTokens = async (user: IUser, ipAddress: string) => {
     // Access Token
@@ -107,6 +108,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     });
 
     if (!user) {
+        logger.warn('Failed login attempt: User not found', { identifier: normalizedIdentifier, ip: req.ip });
         await auditLogService.logAuthAttempt(undefined, normalizedIdentifier, false, 'User not found', req.ip);
         return errorResponse(res, 'Invalid credentials', 401);
     }
@@ -125,6 +127,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
             user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 min lock
         }
         await user.save();
+        logger.warn('Failed login attempt: Invalid password', { userId: user._id, identifier: normalizedIdentifier, ip: req.ip });
         await auditLogService.logAuthAttempt(String(user._id), normalizedIdentifier, false, 'Invalid password', req.ip);
         return errorResponse(res, 'Invalid credentials', 401);
     }
@@ -136,6 +139,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
         await user.save();
     }
 
+    logger.info('User login successful', { userId: user._id, role: user.role, ip: req.ip });
     await auditLogService.logAuthAttempt(String(user._id), normalizedIdentifier, true, 'Login successful', req.ip);
 
     // Verify role
