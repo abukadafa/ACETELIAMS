@@ -28,6 +28,39 @@ export const SEMESTER_LABELS: Record<number, string> = {
   3: 'Third Semester',
 };
 
+export function parseSemesterValue(value: unknown): number {
+  if (value === undefined || value === null) return 1;
+  const raw = typeof value === 'number' ? String(value) : String(value).trim();
+  if (!raw) return 1;
+
+  const cleaned = raw.toLowerCase().replace(/semester|sem\s*/gi, '').trim();
+  const numeric = Number(cleaned);
+  if (!Number.isNaN(numeric) && numeric >= 1) return Math.floor(numeric);
+
+  if (/first|1st/.test(cleaned)) return 1;
+  if (/second|2nd/.test(cleaned)) return 2;
+  if (/third|3rd/.test(cleaned)) return 3;
+  if (/fourth|4th/.test(cleaned)) return 4;
+
+  const romanMap: Record<string, number> = {
+    i: 1,
+    ii: 2,
+    iii: 3,
+    iv: 4,
+    v: 5,
+    vi: 6,
+    vii: 7,
+    viii: 8,
+    ix: 9,
+    x: 10,
+  };
+  if (romanMap[cleaned]) return romanMap[cleaned];
+
+  const digitMatch = cleaned.match(/\d+/);
+  if (digitMatch) return Number(digitMatch[0]);
+  return 1;
+}
+
 const cohortOrder = new Map<string, number>(ACETEL_COHORTS.map((c, i) => [String(c), i]));
 const programmeOrder = new Map<string, number>(ACETEL_PROGRAMMES.map((p, i) => [String(p), i]));
 
@@ -96,7 +129,7 @@ export function groupCoursesByProgrammeThenSemester<T extends { prog?: string; s
   const pm = new Map<string, Map<number, T[]>>();
   for (const c of courses) {
     const p = String(c.prog || c.programme || '').trim() || '— Unassigned programme';
-    const s = Number(c.sem || c.semester) || 1;
+    const s = parseSemesterValue(c.sem ?? c.semester);
     if (!pm.has(p)) pm.set(p, new Map());
     const sm = pm.get(p)!;
     if (!sm.has(s)) sm.set(s, []);

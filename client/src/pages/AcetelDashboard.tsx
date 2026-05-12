@@ -6,6 +6,7 @@ import {
   ACETEL_COHORTS,
   ACETEL_PROGRAMMES,
   SEMESTER_LABELS,
+  parseSemesterValue,
   sortByCohortThenProgramme,
   NON_ADMISSION_REASONS,
   groupItemsByCohortThenProgramme,
@@ -2288,11 +2289,12 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
   const [exportSem, setExportSem] = useState("All Semesters");
   const [listLayout, setListLayout] = useState("grouped");
   const filtered = courses?.filter(c => c.cat === category) || [];
+  const normalizeCourseSemester = (course) => parseSemesterValue(course.sem ?? course.semester);
   const displayRows = filtered
     .filter(c => exportProg === "All Programmes" || c.programme === exportProg)
-    .filter(c => exportSem === "All Semesters" || Number(c.semester || c.sem || 0) === Number(exportSem))
+    .filter(c => exportSem === "All Semesters" || normalizeCourseSemester(c) === Number(exportSem))
     .slice()
-    .sort((a, b) => progRank(a.programme || "") - progRank(b.programme || "") || Number(a.semester || a.sem) - Number(b.semester || b.sem));
+    .sort((a, b) => progRank(a.programme || "") - progRank(b.programme || "") || normalizeCourseSemester(a) - normalizeCourseSemester(b));
   const courseTree = groupCoursesByProgrammeThenSemester(
     displayRows,
     (n) => SEMESTER_LABELS[Number(n)] || `Semester ${n}`
@@ -2360,7 +2362,7 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
               fileName={`ACETEL_${category}_Courses`} 
               title={`${category} Course Registry`}
               headers={[["Code", "Title", "Programme", "Category", "Semester"]]}
-              data={displayRows.map(c => [c.code, c.title, c.programme, category, SEMESTER_LABELS[Number(c.semester || c.sem)] || `Semester ${c.semester || c.sem}`])}
+              data={displayRows.map(c => [c.code, c.title, c.programme, category, SEMESTER_LABELS[normalizeCourseSemester(c)] || `Semester ${normalizeCourseSemester(c)}`])}
             />
             <label style={{ background: "rgba(30,58,138,0.85)", borderRadius: 8, padding: "10px 18px", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
               📥 Bulk Upload
@@ -2411,7 +2413,7 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
                   <td style={{ padding: "14px", fontSize: 13, fontWeight: 700, color: "#1e3a8a", fontFamily: "'Space Mono', monospace" }}>{c.code}</td>
                   <td style={{ padding: "14px", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{c.title}</td>
                   <td style={{ padding: "14px", fontSize: 12, color: "#475569", fontWeight: 600 }}>{c.programme}</td>
-                  <td style={{ padding: "14px", fontSize: 12, color: "#64748b", fontWeight: 700 }}>{SEMESTER_LABELS[Number(c.semester || c.sem)] || `Semester ${c.semester || c.sem}`}</td>
+                  <td style={{ padding: "14px", fontSize: 12, color: "#64748b", fontWeight: 700 }}>{SEMESTER_LABELS[normalizeCourseSemester(c)] || `Semester ${normalizeCourseSemester(c)}`}</td>
                   <td style={{ padding: "14px" }}>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => onEdit?.(c)} style={{ fontSize: 10, padding: "6px 10px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, color: "#008751", cursor: "pointer", fontWeight: 800 }}>EDIT</button>
@@ -2451,7 +2453,7 @@ const AcademicCoursesTab = ({ category, data, onEdit, onDelete, onAddCourse, onD
                           <td style={{ padding: "14px", fontSize: 13, fontWeight: 700, color: "#1e3a8a", fontFamily: "'Space Mono', monospace" }}>{c.code}</td>
                           <td style={{ padding: "14px", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{c.title}</td>
                           <td style={{ padding: "14px", fontSize: 12, color: "#475569", fontWeight: 600 }}>{c.programme}</td>
-                          <td style={{ padding: "14px", fontSize: 12, color: "#64748b", fontWeight: 700 }}>{SEMESTER_LABELS[Number(c.semester || c.sem)] || `Semester ${c.semester || c.sem}`}</td>
+                          <td style={{ padding: "14px", fontSize: 12, color: "#64748b", fontWeight: 700 }}>{SEMESTER_LABELS[normalizeCourseSemester(c)] || `Semester ${normalizeCourseSemester(c)}`}</td>
                           <td style={{ padding: "14px" }}>
                             <div style={{ display: "flex", gap: 6 }}>
                               <button onClick={() => onEdit?.(c)} style={{ fontSize: 10, padding: "6px 10px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, color: "#008751", cursor: "pointer", fontWeight: 800 }}>EDIT</button>
@@ -3944,14 +3946,18 @@ export default function ACETELDashboard() {
       setShortCourses(Array.isArray(scData) ? scData : []);
       setAcademicEvents(Array.isArray(aeData) ? aeData : []);
       setAcademicCourses(
-        (acData || []).map((c) => ({
-          ...c,
-          id: c._id || c.id,
-          code: c.code,
-          prog: c.programme || c.prog,
-          cat: c.category || c.cat,
-          sem: c.semester ?? c.sem,
-        }))
+        (acData || []).map((c) => {
+          const semester = parseSemesterValue(c.semester ?? c.sem);
+          return {
+            ...c,
+            id: c._id || c.id,
+            code: c.code,
+            prog: c.programme || c.prog,
+            cat: c.category || c.cat,
+            sem: semester,
+            semester,
+          };
+        })
       );
       
       setUsers(userData.map(u => ({
