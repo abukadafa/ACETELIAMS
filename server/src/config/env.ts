@@ -22,8 +22,8 @@ const envSchema = z.object({
     CORS_ORIGIN: z.string().optional(),
     
     // Storage
-    UPLOAD_PATH: z.string().default('/opt/acetel/uploads'),
-    BACKUP_DIR: z.string().default('/opt/acetel/backups'),
+    UPLOAD_PATH: z.string().default('/tmp/uploads'),
+    BACKUP_DIR: z.string().default('/tmp/backups'),
     MAX_FILE_SIZE_MB: z.coerce.number().default(10),
     
     // Institutional
