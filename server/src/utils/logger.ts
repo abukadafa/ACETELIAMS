@@ -1,43 +1,32 @@
 import winston from 'winston';
-import path from 'path';
 
-const logFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.errors({ stack: true }),
-  winston.format.splat(),
-  winston.format.json()
-);
+const isProduction = process.env.NODE_ENV === 'production';
+
+const consoleFormat = isProduction
+  ? winston.format.combine(
+      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+      winston.format.errors({ stack: true }),
+      winston.format.splat(),
+      winston.format.json()
+    )
+  : winston.format.combine(
+      winston.format.colorize(),
+      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+      winston.format.errors({ stack: true }),
+      winston.format.splat(),
+      winston.format.simple()
+    );
 
 const logger = winston.createLogger({
-  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-  format: logFormat,
+  level: isProduction ? 'info' : 'debug',
   defaultMeta: { service: 'acetel-iams-api' },
+  // Logs are written to stdout/stderr and captured by the container runtime.
+  // File transports are intentionally omitted — the container filesystem is
+  // read-only in the app directory and persistent log storage should be
+  // handled by a dedicated logging service.
   transports: [
-    // Write all logs with level 'error' and below to 'error.log'
-    new winston.transports.File({ 
-      filename: path.join('logs', 'error.log'), 
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    // Write all logs with level 'info' and below to 'combined.log'
-    new winston.transports.File({ 
-      filename: path.join('logs', 'combined.log'),
-      maxsize: 10485760, // 10MB
-      maxFiles: 10,
-    }),
+    new winston.transports.Console({ format: consoleFormat }),
   ],
 });
-
-// If we're not in production then log to the `console` with the format:
-// `${info.level}: ${info.message} JSON.stringify({ ...rest }) `
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    ),
-  }));
-}
 
 export default logger;
