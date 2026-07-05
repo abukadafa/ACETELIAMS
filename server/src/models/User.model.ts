@@ -9,6 +9,7 @@ export interface IFacilitatorCourseAssignment {
 }
 
 export interface IUser extends Document {
+    _id: mongoose.Types.ObjectId;
     name: string;
     username: string;
     email: string;
@@ -159,15 +160,18 @@ const UserSchema: Schema = new Schema(
     }
 );
 
-// Hash password before saving
-UserSchema.pre('save', async function () {
-    if (!this.isModified('password')) return;
+// Hash password before saving (pre-save hook)
+UserSchema.pre<IUser>('save', async function (next) {
+    if (!this.isModified('password')) {
+        return next();
+    }
 
     try {
-        const salt = await bcrypt.genSalt(12); // Master prompt suggests saltRounds: 12
-        this.password = await bcrypt.hash(this.password as string, salt);
+        const salt = await bcrypt.genSalt(12);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
     } catch (err: any) {
-        throw err;
+        next(err);
     }
 });
 
