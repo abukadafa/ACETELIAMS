@@ -37,33 +37,51 @@ initCronJobs();
 
 const app: Application = express();
 const PORT = env.PORT;
+
 // Security Middleware
 app.use(cors({
     origin: env.NODE_ENV === 'production'
         ? (env.CORS_ORIGIN ? env.CORS_ORIGIN.split(',') : [env.FRONTEND_URL])
-        : true,
+        : ['http://localhost:5173', 'http://localhost:3000'],
     credentials: true
 }));
+
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // unsafe-eval for Vite/React dev if needed
+            scriptSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'", "fonts.googleapis.com"],
-            imgSrc: ["'self'", "data:", "nou.edu.ng", "acetel.nou.edu.ng"],
+            imgSrc: ["'self'", "data:", "https://acetel.nou.edu.ng", "https://*.nou.edu.ng"],
             fontSrc: ["'self'", "fonts.gstatic.com"],
-            connectSrc: ["'self'", "http://localhost:5000", "http://localhost:5001", "http://localhost:5173", env.FRONTEND_URL || ""].filter(Boolean),
+            connectSrc: ["'self'", "http://localhost:5000", "http://localhost:5001", "http://localhost:5173"].filter(Boolean),
             frameSrc: ["'none'"],
             objectSrc: ["'none'"],
-            upgradeInsecureRequests: [],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
+            upgradeInsecureRequests: env.NODE_ENV === 'production' ? [] : undefined,
         },
     },
+    hsts: {
+        maxAge: 31536000, // 1 year in seconds
+        includeSubDomains: true,
+        preload: true,
+    },
+    referrerPolicy: {
+        policy: 'strict-origin-when-cross-origin',
+    },
+    noSniff: true,
+    xssFilter: true,
+    frameguard: {
+        action: 'deny',
+    },
 }));
+
 app.use(cookieParser());
 app.use(csrfProtection);
 app.use(auditMiddleware);
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Apply rate limiters
 app.use('/api', apiRateLimit);

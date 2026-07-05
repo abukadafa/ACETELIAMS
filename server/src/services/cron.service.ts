@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';

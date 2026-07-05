@@ -5,11 +5,11 @@ dotenv.config();
 
 const envSchema = z.object({
     // Server
-    PORT: z.coerce.number().default(10000),
+    PORT: z.coerce.number().default(5000),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     
     // Database
-    MONGODB_URI: z.string().url(),
+    MONGODB_URI: z.string().min(1, 'MONGODB_URI is required').default('mongodb://localhost:27017/acetel_iams'),
     
     // Auth
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
@@ -22,8 +22,8 @@ const envSchema = z.object({
     CORS_ORIGIN: z.string().optional(),
     
     // Storage
-    UPLOAD_PATH: z.string().default('/opt/acetel/uploads'),
-    BACKUP_DIR: z.string().default('/opt/acetel/backups'),
+    UPLOAD_PATH: z.string().default('/opt/acetel-iams/uploads'),
+    BACKUP_DIR: z.string().default('/opt/acetel-iams/backups'),
     MAX_FILE_SIZE_MB: z.coerce.number().default(10),
     
     // Institutional
