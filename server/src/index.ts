@@ -58,8 +58,8 @@ app.use(helmet({
             frameSrc: ["'none'"],
             objectSrc: ["'none'"],
             baseUri: ["'self'"],
-            formAction: ["'self'"],
-            upgradeInsecureRequests: env.NODE_ENV === 'production' ? [] : undefined,
+            formAction: ["'self'"], ...(env.NODE_ENV === 'production' ? { upgradeInsecureRequests: [] } : {}),
+         
         },
     },
     hsts: {
